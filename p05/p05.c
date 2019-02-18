@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 int main(int argc, char **argv){
     if(argc < 3){
@@ -13,10 +15,11 @@ int main(int argc, char **argv){
     int i;
     FILE *file;
     for(i = 2; i < argc; i++){
-        if(strcmp(argv[i],"--systemcalls")){
+        if(strcmp(argv[i],"--systemcalls") == 0){
             sysloc = i;
             numSubs--;
             break;
+    }
     }
     file = fopen(argv[1],"r");
     int fd = open(argv[1],O_RDONLY);
@@ -78,7 +81,7 @@ int main(int argc, char **argv){
         }
     }
     else{
-        while((next = read(fd,&next,1)) > 0){
+        while(read(fd,&next,1) > 0){
             length++;
             if(next == ' ' || next == '\n'){
                 if (length == size){
@@ -87,12 +90,16 @@ int main(int argc, char **argv){
                 }
                 buffer[length] = '\0';
                 for(i = 0; i < numSubs; i++){
-                    if(i + 2 == sysloc){
-                        continue;
+                    char * sub;
+                    if(i + 2 >= sysloc){
+                        sub = argv[i + 3];
+                    }
+                    else{
+                        sub = argv[i + 2];
                     }
                     int count = 0;
                     const char *temp = buffer;
-                    while(temp = strcasestr(temp, argv[i + 2]))
+                    while(temp = strcasestr(temp,sub))
                     {
                         count++;
                         temp++;
