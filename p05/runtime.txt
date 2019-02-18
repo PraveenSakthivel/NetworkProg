@@ -1,0 +1,11 @@
+Runtime Numbers without system calls:
+real	0m0.007s
+user	0m0.004s
+sys	0m0.000s
+
+Runtime Numbers with system calls:
+real	0m0.109s
+user	0m0.000s
+sys	0m0.108s
+
+The program ran faster on several orders of magnitudes when not using system calls. This is because the library properly buffer their read system calls in order to ensure maximum efficiency. Whereas, my program would otherwise use a system call for each character which is much less efficient. As a result the program takes more time with the system calls flag.   
