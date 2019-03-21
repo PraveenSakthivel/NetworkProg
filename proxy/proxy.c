@@ -39,17 +39,14 @@ int main(int argc, char **argv)
     Listen(listenfd, 10);
     while(1){
         int connfd = Accept(listenfd, (struct sockaddr*)NULL, NULL);
-        char * buffer = (char *) malloc(sizeof(char) * 100);
+        char buffer[1000];
         int size = 100;
         int loc = 0;
-        while(read(connfd,buffer[loc],1) > 0){
-            loc++;
-            if (loc == size){
-                size *= 2;
-                buffer = (char *) realloc(buffer,size * sizeof(char));
-            }
+        int rbytes;
+        if((rbytes = recv(connfd, buffer, sizeof(buffer), 0)) <= 0){
+
         }
-        buffer[loc] = '\n';
+        buffer[999] = '\n';
         printf("\n%s",buffer);
     }
     exit(0);
