@@ -43,9 +43,18 @@ int main(int argc, char **argv)
         int size = 100;
         int loc = 0;
         int rbytes;
+        char type[20];
+        char addr[500];
+        char xtra[200];
         if((rbytes = recv(connfd, buffer, sizeof(buffer), 0)) <= 0){
 
         }
+        sscanf(buffer,"%s %s %s", type, addr, xtra);
+        char logstring[1000];
+        format_log_entry(logstring,serv_addr.sin_addr.s_addr,addr,rbytes);
+        FILE * log = fopen("proxy.log","a+");
+        fwrite(logstring , 1 , sizeof(log) , log );
+        fclose(log);
         buffer[999] = '\n';
         printf("\n%s",buffer);
     }
