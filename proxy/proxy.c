@@ -17,13 +17,12 @@
  */
 void format_log_entry(char *logstring, struct sockaddr_in *sockaddr, char *uri, int size);
 
-int request(char * addr, int port, char * req,int size, char * resp, int client);
+int request(char * addr, char * port, char * req,int size, char * resp, int client);
 /* 
  * main - Main routine for the proxy program 
  */
 int main(int argc, char **argv)
 {
-
     /* Check arguments */
     if (argc != 2) {
 	    fprintf(stderr, "Usage: %s <port number>\n", argv[0]);
@@ -48,65 +47,73 @@ int main(int argc, char **argv)
         if((rbytes = recv(connfd, buffer, sizeof(buffer), 0)) <= 0){
 
         }
-	buffer[rbytes] = '\0';
+	    buffer[rbytes] = '\0';
         sscanf(buffer,"%s %s %s", type, addr, xtra);
         char logstring[1000];
         format_log_entry(logstring,(struct sockaddr_in*)&serv_addr ,addr,rbytes);
-	if(strstr(addr,"http://") != NULL || strstr(addr,"https://") != NULL){
+	    if(strstr(addr,"http://") != NULL || strstr(addr,"https://") != NULL){
             addr = strstr(addr,"://") + 3;
     	}
-	char * tempAddr = malloc(sizeof(char) * strlen(addr));
-	strcpy(tempAddr,addr);
-	char * uri = strtok(tempAddr,":");
-	char * temp = strtok(NULL,":");
-	int connport = 0;
-	if(temp != NULL){
-        connport =  atoi(temp);
-	}
-	if(connport == 0){
-	    connport = 80;
-	}
+        char * tempAddr = malloc(sizeof(char) * strlen(addr));
+        strcpy(tempAddr,addr);
+        char * uri = strtok(tempAddr,":");
+        char * temp = strtok(NULL,":");
+        char * connport = "80";
+        if(temp != NULL){
+            if(atoi(temp) != 0){
+                connport = temp;
+            }
+        }
         char * response = calloc(1,10000);
         request(uri,connport,buffer,rbytes,response,connfd);
         FILE * log = fopen("proxy.log","a+");
         fwrite(logstring , 1 , sizeof(log) , log );
         fclose(log);
-	free(type);
-	free(addr);
-	free(xtra);
-	free(response);
-	free(tempAddr);
+        free(type);
+        free(addr);
+        free(xtra);
+        free(response);
+        free(tempAddr);
     }
     exit(0);
 }
 
-int request(char * addr, int port, char * req, int size, char * resp, int client){
-    struct hostent *server;
-    struct sockaddr_in serv_addr;
-    int sockfd;
-    sockfd = Socket(AF_INET, SOCK_STREAM, 0);
-    server = gethostbyname(addr);
-    if(server == NULL){
-	printf("Incorrect Server Address");
-    }
-    memset(&serv_addr,0,sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    memcpy(&serv_addr.sin_addr.s_addr,server->h_addr,server->h_length);
+int request(char * addr, char * port, char * req, int size, char * resp, int client){
+    struct addrinfo hints, *servinfo, *p;
+    int sockfd, bytes, sent, received, total;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    getaddrinfo(addr,port,&hints,&servinfo);
     int flag = 1;
     setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
-    Connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr));
-    Write(sockfd,req,size);
-    int rbytes = 0;
     int tbytes = 0;
-    rbytes = recv(sockfd, resp, 9999, 0);
-    while(rbytes != 0){
-	printf("%s",resp);
-	bzero(resp, 9999);
-	tbytes += rbytes;
-	rbytes = recv(sockfd, resp, 9999, 0); 
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+    	if ((sockfd = socket(p->ai_family, p->ai_socktype,
+            p->ai_protocol)) == -1) {
+            continue;
+    	}
+    	if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            continue;
+    	}
+        Write(sockfd,req,size);
+        int rbytes = 0;
+        rbytes = recv(sockfd, resp, 9999, 0);
+        while(rbytes != 0){
+	        printf("%s",resp);
+	        bzero(resp, 9999);
+	        tbytes += rbytes;
+	        rbytes = recv(sockfd, resp, 9999, 0); 
+        }
+	    break;
+    }
+    if(p == NULL){
+	    printf("Unable to Connect");
     }
     close(sockfd);
+    freeaddrinfo(servinfo);
     return tbytes;
 }
 
