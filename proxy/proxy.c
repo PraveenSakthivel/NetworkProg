@@ -11,12 +11,13 @@
  */ 
 
 #include "csapp.h"
-
+#include <netinet/tcp.h>
 /*
  * Function prototypes
  */
 void format_log_entry(char *logstring, struct sockaddr_in *sockaddr, char *uri, int size);
 
+int request(char * addr, int port, char * req,int size, char * resp, int client);
 /* 
  * main - Main routine for the proxy program 
  */
@@ -40,25 +41,73 @@ int main(int argc, char **argv)
     while(1){
         int connfd = Accept(listenfd, (struct sockaddr*)NULL, NULL);
         char buffer[1000];
-        int size = 100;
-        int loc = 0;
         int rbytes;
-        char type[20];
-        char addr[500];
-        char xtra[200];
+        char * type = calloc(1,20);
+        char * addr = calloc(1,500);
+        char * xtra = calloc(1,200);
         if((rbytes = recv(connfd, buffer, sizeof(buffer), 0)) <= 0){
 
         }
+	buffer[rbytes] = '\0';
         sscanf(buffer,"%s %s %s", type, addr, xtra);
         char logstring[1000];
-        format_log_entry(logstring,serv_addr.sin_addr.s_addr,addr,rbytes);
+        format_log_entry(logstring,(struct sockaddr_in*)&serv_addr ,addr,rbytes);
+	if(strstr(addr,"http://") != NULL || strstr(addr,"https://") != NULL){
+            addr = strstr(addr,"://") + 3;
+    	}
+	char * tempAddr = malloc(sizeof(char) * strlen(addr));
+	strcpy(tempAddr,addr);
+	char * uri = strtok(tempAddr,":");
+	char * temp = strtok(NULL,":");
+	int connport = 0;
+	if(temp != NULL){
+        connport =  atoi(temp);
+	}
+	if(connport == 0){
+	    connport = 80;
+	}
+        char * response = calloc(1,10000);
+        request(uri,connport,buffer,rbytes,response,connfd);
         FILE * log = fopen("proxy.log","a+");
         fwrite(logstring , 1 , sizeof(log) , log );
         fclose(log);
-        buffer[999] = '\n';
-        printf("\n%s",buffer);
+	free(type);
+	free(addr);
+	free(xtra);
+	free(response);
+	free(tempAddr);
     }
     exit(0);
+}
+
+int request(char * addr, int port, char * req, int size, char * resp, int client){
+    struct hostent *server;
+    struct sockaddr_in serv_addr;
+    int sockfd;
+    sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+    server = gethostbyname(addr);
+    if(server == NULL){
+	printf("Incorrect Server Address");
+    }
+    memset(&serv_addr,0,sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    memcpy(&serv_addr.sin_addr.s_addr,server->h_addr,server->h_length);
+    int flag = 1;
+    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+    Connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr));
+    Write(sockfd,req,size);
+    int rbytes = 0;
+    int tbytes = 0;
+    rbytes = recv(sockfd, resp, 9999, 0);
+    while(rbytes != 0){
+	printf("%s",resp);
+	bzero(resp, 9999);
+	tbytes += rbytes;
+	rbytes = recv(sockfd, resp, 9999, 0); 
+    }
+    close(sockfd);
+    return tbytes;
 }
 
 /*
