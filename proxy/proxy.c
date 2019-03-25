@@ -15,7 +15,7 @@
 /*
  * Function prototypes
  */
-void format_log_entry(char *logstring, struct sockaddr_in *sockaddr, char *uri, int size);
+int format_log_entry(char *logstring, struct sockaddr_in *sockaddr, char *uri, int size);
 
 int request(char * addr, char * port, char * req,int size, char * resp, int client);
 /* 
@@ -37,25 +37,37 @@ int main(int argc, char **argv)
     serv_addr.sin_port = htons(port);
     Bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     Listen(listenfd, 10);
+    int flag = 1;
+    char * type = malloc(20*sizeof(char));
+    char * addr = malloc(500*sizeof(char));
+    char * xtra = malloc(200*sizeof(char));
+    char * response = malloc(10000*sizeof(char));
+    struct sockaddr_in client_addr;
     while(1){
-        int connfd = Accept(listenfd, (struct sockaddr*)NULL, NULL);
+	memset(&client_addr,0, sizeof(client_addr));
+	socklen_t addr_size = sizeof(client_addr);
+        int connfd = Accept(listenfd, (struct sockaddr*)&client_addr, &addr_size);
+    	setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
         char buffer[1000];
         int rbytes;
-        char * type = calloc(1,20);
-        char * addr = calloc(1,500);
-        char * xtra = calloc(1,200);
+        bzero(type,20*sizeof(char));
+        bzero(addr,500*sizeof(char));
+        bzero(xtra,200*sizeof(char));
         if((rbytes = recv(connfd, buffer, sizeof(buffer), 0)) <= 0){
 
         }
 	    buffer[rbytes] = '\0';
         sscanf(buffer,"%s %s %s", type, addr, xtra);
         char logstring[1000];
-        format_log_entry(logstring,(struct sockaddr_in*)&serv_addr ,addr,rbytes);
-	    if(strstr(addr,"http://") != NULL || strstr(addr,"https://") != NULL){
-            addr = strstr(addr,"://") + 3;
+        char * tempAddr = malloc(sizeof(char) * strlen(addr)); 
+	char * freeAddr = tempAddr;
+	int modified = 0;
+        strcpy(tempAddr,addr); 
+	if(strstr(tempAddr,"http://") != NULL || strstr(tempAddr,"https://") != NULL){
+            tempAddr = strstr(tempAddr,"://") + 3;
+	    modified = 1;
     	}
-        char * tempAddr = malloc(sizeof(char) * strlen(addr));
-        strcpy(tempAddr,addr);
+	tempAddr = strtok(tempAddr,"/");
         char * uri = strtok(tempAddr,":");
         char * temp = strtok(NULL,":");
         char * connport = "80";
@@ -64,23 +76,34 @@ int main(int argc, char **argv)
                 connport = temp;
             }
         }
-        char * response = calloc(1,10000);
-        request(uri,connport,buffer,rbytes,response,connfd);
-        FILE * log = fopen("proxy.log","a+");
-        fwrite(logstring , 1 , sizeof(log) , log );
-        fclose(log);
-        free(type);
-        free(addr);
-        free(xtra);
-        free(response);
-        free(tempAddr);
+	int urilen = strlen(uri) - 1;
+	if(uri[urilen] == '/'){
+	    uri[urilen] = 0;
+	}
+        bzero(response,10000*sizeof(char));
+        int received = request(uri,connport,buffer,rbytes,response,connfd);
+	if(received > 0){
+	    int trimlen = format_log_entry(logstring,(struct sockaddr_in*)&client_addr ,addr,received);
+	    char trimmedlog[trimlen];
+	    strncpy((const char *)&trimmedlog,(const char *)&logstring,trimlen);
+            FILE * log = fopen("proxy.log","a+");
+            fwrite(trimmedlog , 1 , sizeof(trimmedlog) , log );
+            fclose(log);
+	}
+	close(connfd);
+	if(!modified){
+            free(tempAddr);
+	}
+	else{
+	    free(freeAddr);
+	}
     }
     exit(0);
 }
 
 int request(char * addr, char * port, char * req, int size, char * resp, int client){
     struct addrinfo hints, *servinfo, *p;
-    int sockfd, bytes, sent, received, total;
+    int sockfd;
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -100,12 +123,15 @@ int request(char * addr, char * port, char * req, int size, char * resp, int cli
     	}
         Write(sockfd,req,size);
         int rbytes = 0;
-        rbytes = recv(sockfd, resp, 9999, 0);
+        rbytes = read(sockfd, resp, 9999);
         while(rbytes != 0){
-	        printf("%s",resp);
+	        Write(client,resp,rbytes);
 	        bzero(resp, 9999);
 	        tbytes += rbytes;
-	        rbytes = recv(sockfd, resp, 9999, 0); 
+		if(rbytes != 9999){
+		    break;
+		}
+	        rbytes = read(sockfd, resp, 9999); 
         }
 	    break;
     }
@@ -124,7 +150,7 @@ int request(char * addr, char * port, char * req, int size, char * resp, int cli
  * (sockaddr), the URI from the request (uri), and the size in bytes
  * of the response from the server (size).
  */
-void format_log_entry(char *logstring, struct sockaddr_in *sockaddr, 
+int format_log_entry(char *logstring, struct sockaddr_in *sockaddr, 
 		      char *uri, int size)
 {
     time_t now;
@@ -150,7 +176,7 @@ void format_log_entry(char *logstring, struct sockaddr_in *sockaddr,
 
 
     /* Return the formatted log entry string */
-    sprintf(logstring, "%s: %d.%d.%d.%d %s", time_str, a, b, c, d, uri);
+   return  sprintf(logstring, "%s: %d.%d.%d.%d %s %d\n", time_str, a, b, c, d, uri,size);
 }
 
 
