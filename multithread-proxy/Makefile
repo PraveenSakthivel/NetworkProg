@@ -7,15 +7,15 @@ LDFLAGS = -lpthread
 
 OBJS = proxy.o csapp.o
 
-all: proxy
+#all: proxy
 
-proxy: $(OBJS)
+#proxy: $(OBJS)
 
-csapp.o: csapp.c
-	$(CC) $(CFLAGS) -c csapp.c
+#csapp.o: csapp.c
+#	$(CC) $(CFLAGS) -c csapp.c
 
-proxy.o: proxy.c
-	$(CC) $(CFLAGS) -c proxy.c
-clean:
-	rm -f *~ *.o proxy 
-
+#proxy.o: proxy.c
+#	$(CC) $(CFLAGS) -c proxy.c
+main:
+	$(CC) $(CFLAGS) -o multithreadproxy multithread-proxy.c
+	$(CC) $(CFLAGS) -o multiprocessproxy multiprocess-proxy.c

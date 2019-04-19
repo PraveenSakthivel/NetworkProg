@@ -81,7 +81,7 @@ int main(int argc, char **argv)
         params->connfd = connfd;
         params->clientaddr = clientaddr;
         pthread_t proxyId;
-        pthread_create(&proxyId, NULL, proxy, (void *)params);
+        pthread_create(proxyId, NULL, proxy, (void *)params);
         pthread_detach(proxyId);
     }
 
@@ -384,6 +384,31 @@ void format_log_entry(char *logstring, struct sockaddr_in *sockaddr,
 
     /* Return the formatted log entry string */
     sprintf(logstring, "%s: %d.%d.%d.%d %s", time_str, a, b, c, d, uri);
+}
+
+int open_clientfd(char *hostname, int port){
+    struct addrinfo hints, *servinfo, *p;
+    int sockfd;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    getaddrinfo(hostname,port,&hints,&servinfo);
+    int flag = 1;
+    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+    int tbytes = 0;
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+    	if ((sockfd = socket(p->ai_family, p->ai_socktype,
+            p->ai_protocol)) == -1) {
+            continue;
+    	}
+    	if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            continue;
+        }
+        return sockfd;
+    }
+    return -1;
 }
 
 
