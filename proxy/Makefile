@@ -5,17 +5,22 @@ CC = gcc
 CFLAGS = -Wall -g 
 LDFLAGS = -lpthread
 
-OBJS = proxy.o csapp.o
+TOBJS = multithread-proxy.o csapp.o
+POBJS = multiprocess-proxy.o csapp.o
 
-all: proxy
+all: multithread-proxy multiprocess-proxy
 
-proxy: $(OBJS)
+multithread-proxy: $(TOBJS)
+
+multiprocess-proxy: $(POBJS)
 
 csapp.o: csapp.c
 	$(CC) $(CFLAGS) -c csapp.c
 
-proxy.o: proxy.c
-	$(CC) $(CFLAGS) -c proxy.c
-clean:
-	rm -f *~ *.o proxy 
+multithread-proxy.o: multithread-proxy.c
+	$(CC) $(CFLAGS) -c multithread-proxy.c
 
+multiprocess-proxy.o: multiprocess-proxy.c
+	$(CC) $(CFLAGS) -c multiprocess-proxy.c
+clean:
+	rm -f *~ *.o multiprocess-proxy multithread-proxy 
