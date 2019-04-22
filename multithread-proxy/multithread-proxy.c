@@ -28,7 +28,6 @@ FILE *log_file; /* Log file with one line per HTTP request */
 /*
  * Functions not provided to the students
  */
-int open_clientfd(char *hostname, int port); 
 ssize_t Rio_readn_w(int fd, void *ptr, size_t nbytes);
 ssize_t Rio_readlineb_w(rio_t *rp, void *usrbuf, size_t maxlen); 
 void Rio_writen_w(int fd, void *usrbuf, size_t n);
@@ -71,17 +70,18 @@ int main(int argc, char **argv)
 
     /* Inititialize */
     log_file = Fopen(PROXY_LOG, "a");
-  
+    int flag = 1;
     /* Wait for and process client connections */
     while (1) { 
         params = (param *) malloc(sizeof(param));
         error = 0;   //Used to fix a bug
         clientlen = sizeof(clientaddr);  
         connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+	setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
         params->connfd = connfd;
         params->clientaddr = clientaddr;
         pthread_t proxyId;
-        pthread_create(proxyId, NULL, proxy, (void *)params);
+        pthread_create(&proxyId, NULL, proxy, (void *)params);
         pthread_detach(proxyId);
     }
 
@@ -218,30 +218,34 @@ void proxy(void * params){
     /*
      * Forward the request to the end server
      */ 
+    int flag = 1;
     if ((serverfd = open_clientfd(hostname, serverport)) < 0) {
         printf("process_request: Unable to connect to end server.\n");
         free(request);
         return;
     }
-    Rio_writen_w(serverfd, "GET /", strlen("GET /"));
-    Rio_writen_w(serverfd, pathname, strlen(pathname));
-    Rio_writen_w(serverfd, " HTTP/1.0\r\n", strlen(" HTTP/1.0\r\n"));
-    Rio_writen_w(serverfd, rest_of_request, strlen(rest_of_request));
+    setsockopt(serverfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+    Write(serverfd, "GET /", strlen("GET /"));
+    Write(serverfd, pathname, strlen(pathname));
+    Write(serverfd, " HTTP/1.0\r\n", strlen(" HTTP/1.0\r\n"));
+    Write(serverfd, rest_of_request, strlen(rest_of_request));
   
 
     /*
      * Receive reply from server and forward on to client
      */
-    Rio_readinitb(&rio, serverfd);
     response_len = 0;
-    while( (n = Rio_readn_w(serverfd, buf, MAXLINE)) > 0 ) {
-	response_len += n;
-	Rio_writen_w(connfd, buf, n);
-#if defined(DEBUG)	
-	printf("Forwarded %d bytes from end server to client\n", n);
-	fflush(stdout);
-#endif
-	bzero(buf, MAXLINE);
+    while( (n = Read(serverfd, buf, MAXLINE)) > 0 ) {
+		response_len += n;
+		Write(connfd, buf, n);
+	#if defined(DEBUG)	
+		printf("Forwarded %d bytes from end server to client\n", n);
+		fflush(stdout);
+	#endif
+		bzero(buf, MAXLINE);
+		if(n < MAXLINE){
+			break;
+		}
     }
 
     /*
@@ -385,30 +389,3 @@ void format_log_entry(char *logstring, struct sockaddr_in *sockaddr,
     /* Return the formatted log entry string */
     sprintf(logstring, "%s: %d.%d.%d.%d %s", time_str, a, b, c, d, uri);
 }
-
-int open_clientfd(char *hostname, int port){
-    struct addrinfo hints, *servinfo, *p;
-    int sockfd;
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    getaddrinfo(hostname,port,&hints,&servinfo);
-    int flag = 1;
-    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
-    int tbytes = 0;
-    for(p = servinfo; p != NULL; p = p->ai_next) {
-    	if ((sockfd = socket(p->ai_family, p->ai_socktype,
-            p->ai_protocol)) == -1) {
-            continue;
-    	}
-    	if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
-            continue;
-        }
-        return sockfd;
-    }
-    return -1;
-}
-
-
